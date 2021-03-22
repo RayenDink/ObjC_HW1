@@ -6,14 +6,14 @@
 //
 
 #import "MainViewController.h"
-#import <MapKit/MapKit.h>
+#import "ResultsTableViewController.h"
 
-#import "LocationManager.h"
+@interface MainViewController () <UISearchResultsUpdating, UINavigationControllerDelegate, UIImagePickerControllerDelegate>
 
-@interface MainViewController () <MKMapViewDelegate>
+@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) ResultsTableViewController *resultsViewController;
 
-@property (nonatomic, weak) MKMapView *mapView;
-@property (nonatomic, strong) LocationManager *locationManager;
+@property (nonatomic, copy) NSArray *array;
 
 @end
 
@@ -22,97 +22,71 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.title = @"Map Example";
     self.view.backgroundColor = [UIColor yellowColor];
     
-    //Карта
-    MKMapView *map = [[MKMapView alloc] initWithFrame:self.view.bounds];
-    self.mapView = map;
-    self.mapView.delegate = self;
+    self.title = @"Search";
+    self.array = @[@"White", @"Green", @"Red", @"Black", @"Gray", @"Yellow", @"Blue", @"Pink"];
     
-    //Локация и регион
-    CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(55.752200, 37.6155600);
-    MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coordinate, 1000000, 1000000);
-    [self.mapView setRegion:region animated:YES];
+    self.resultsViewController = [ResultsTableViewController new];
+    self.searchController = [[UISearchController alloc] initWithSearchResultsController:self.resultsViewController];
+    self.searchController.searchResultsUpdater = self;
     
-    //Метка
-    MKPointAnnotation *annotation = [MKPointAnnotation new];
-    annotation.title = @"Билет Брянск - Москва";
-    annotation.subtitle = @"12 000р";
-    annotation.coordinate = coordinate;
+    self.navigationItem.searchController = self.searchController;
+    //self.tableView.tableHeaderView = self.searchController.searchBar;
     
-    [self.mapView addAnnotation:annotation];
-    
-    [self.view addSubview:self.mapView];
-    
-    
-    CLLocation *location = [[CLLocation alloc] initWithLatitude:55.752200 longitude:37.6155600];
-    [self addressFromLocation:location];
-    
-    [self locationFromAddress:@"Moscow, Nikolskay 23"];
-    
-    self.locationManager = [LocationManager new];
-    [self.locationManager start];
+    self.navigationItem.rightBarButtonItem =
+    [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"camera"] style:UIBarButtonItemStylePlain target:self action:@selector(openImagePicker)];
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [self.locationManager start];
+- (void)openImagePicker {
+    UIImagePickerController *controller = [UIImagePickerController new];
+    controller.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    controller.delegate = self;
+    [self presentViewController:controller animated:YES completion:nil];
 }
 
-- (void)viewDidDisappear:(BOOL)animated {
-    [self.locationManager stop];
+
+#pragma mark - UITableViewDelegate
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+
+    return self.array.count;
 }
 
-#pragma mark - MKMapViewDelegate
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *identifier = @"ReuseIdentifier";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:(UITableViewCellStyleDefault) reuseIdentifier:identifier];
+    }
+    cell.textLabel.text = self.array[indexPath.row];
+    return cell;
+}
 
-- (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation {
+#pragma mark -  UISearchResultsUpdating
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    if (searchController.searchBar.text.length > 0) {
+        NSPredicate *predicate = [NSPredicate predicateWithFormat:@"SELF CONTAINS[cd] %@", searchController.searchBar.text];
+        self.resultsViewController.results = [self.array filteredArrayUsingPredicate:predicate];
+        [self.resultsViewController update];
+    }
+}
+
+#pragma mark - UIImagePickerControllerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
     
-    static NSString *identifier = @"AnnotationIdentifer";
-    MKAnnotationView *annotationView = [mapView dequeueReusableAnnotationViewWithIdentifier:identifier];
-    
-    if (annotationView) {
-        annotationView.annotation = annotation;
-    } else {
-        annotationView = [[MKMarkerAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:identifier];
-        annotationView.canShowCallout = YES;
-        annotationView.calloutOffset = CGPointMake(0.0, 5.0);
-        annotationView.rightCalloutAccessoryView = [UIButton buttonWithType:UIButtonTypeDetailDisclosure];
+    UIImage *image = info[UIImagePickerControllerOriginalImage];
+    if (image) {
+        NSLog(@"Image ");
     }
     
-    return annotationView;
+    [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
-#pragma mark - Private
-
-// Location -> Address
-- (void)addressFromLocation:(CLLocation *)location {
-    
-    CLGeocoder *geocoder = [CLGeocoder new];
-    [geocoder reverseGeocodeLocation:location completionHandler:
-     ^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
-        
-        if (placemarks.count > 0) {
-            for (MKPlacemark *placemark in placemarks) {
-                NSLog(@"Placemark Address \n\n - %@", placemark.name);
-            }
-        }
-    }];
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
 }
-
-// Address -> Location
-- (void)locationFromAddress:(NSString *)address {
-    CLGeocoder *geocoder = [CLGeocoder new];
-    
-    [geocoder geocodeAddressString:address completionHandler:
-        ^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
-            
-            if (placemarks.count > 0) {
-                for (MKPlacemark *placemark in placemarks) {
-                    NSLog(@"Placemark Location \n\n - %@", placemark.location);
-                }
-            }
-    }];
-}
-
 
 @end
